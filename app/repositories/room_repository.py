@@ -6,16 +6,16 @@ class RoomRepository:
     ROOMS_KEY = "chat:rooms"
     
     def __init__(self, redis_conn: Redis) -> None:
-        self.__conn =  redis_conn
+        self._conn =  redis_conn
         
     def _meta_key(self, roomId) -> str:
         return f"chat:rooms:{roomId}:meta"
     
     def createRoom(self, roomName: str):
-        roomId = self.__conn.incr("chat:rooms:next_id")
+        roomId = self._conn.incr("chat:rooms:next_id", 1)
         createdAt = datetime.now(timezone.utc).isoformat()
         
-        with self.__conn.pipeline(transaction=True) as pipe:
+        with self._conn.pipeline(transaction=True) as pipe:
             pipe.sadd(self.ROOMS_KEY, roomId)
             
             pipe.hset(
@@ -36,14 +36,13 @@ class RoomRepository:
         }
         
     def getRooms(self):
-        roomIds = self.__conn.smembers(self.ROOMS_KEY)
+        roomIds = self._conn.smembers(self.ROOMS_KEY)
         
         if not roomIds:
             return []
         
-        with self.__conn.pipeline(transaction=False) as pipe:
+        with self._conn.pipeline(transaction=False) as pipe:
             for roomId in roomIds:
-                print(roomId)
                 pipe.hgetall(self._meta_key(roomId))
             
             rooms = pipe.execute()
@@ -52,3 +51,7 @@ class RoomRepository:
             (room for room in rooms if room),
             key=lambda room: (room["created_at"], room["id"])
         )
+        
+    def getRoom(self, roomId: int):
+        room = self._conn.hgetall(self._meta_key(roomId))
+        return room if room else None
